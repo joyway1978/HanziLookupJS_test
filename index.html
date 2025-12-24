@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HanziLookupJS 手写识别 Demo</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --text: #1d1d1f;
+      --muted: #5f6368;
+      --accent: #2563eb;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f1115;
+        --card: #1a1c22;
+        --text: #f5f5f5;
+        --muted: #9aa0a6;
+        --accent: #60a5fa;
+      }
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .container {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }
+
+    header {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 700;
+    }
+
+    header p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      align-items: start;
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 16px;
+      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+      padding: 20px;
+    }
+
+    #canvas {
+      width: 100%;
+      height: 320px;
+      background: linear-gradient(transparent 31px, rgba(0, 0, 0, 0.06) 32px),
+        linear-gradient(90deg, transparent 31px, rgba(0, 0, 0, 0.06) 32px);
+      background-size: 32px 32px;
+      border-radius: 12px;
+      border: 2px solid rgba(37, 99, 235, 0.2);
+      touch-action: none;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    button {
+      border: none;
+      border-radius: 10px;
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    button.secondary {
+      background: transparent;
+      border: 1px solid rgba(37, 99, 235, 0.4);
+      color: var(--accent);
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 16px rgba(37, 99, 235, 0.2);
+    }
+
+    .result {
+      font-size: 36px;
+      font-weight: 700;
+      letter-spacing: 4px;
+      margin-top: 12px;
+    }
+
+    .status {
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-top: 8px;
+    }
+
+    .list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(37, 99, 235, 0.12);
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    footer {
+      margin-top: 28px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .tips {
+      display: grid;
+      gap: 10px;
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>HanziLookupJS 手写识别 Demo</h1>
+      <p>在下面的手写框中使用鼠标或触控笔书写汉字，系统将调用 HanziLookupJS 进行识别。</p>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <canvas id="canvas" width="640" height="360" aria-label="手写输入区域"></canvas>
+        <div class="controls">
+          <button id="recognizeBtn">识别汉字</button>
+          <button class="secondary" id="clearBtn">清除画布</button>
+          <button class="secondary" id="undoBtn">撤销上一笔</button>
+        </div>
+        <div class="status" id="strokeStatus">当前笔画数：0</div>
+      </section>
+
+      <section class="card">
+        <h2>识别结果</h2>
+        <div class="result" id="primaryResult">—</div>
+        <div class="status" id="resultStatus">请先书写并点击“识别汉字”。</div>
+        <div class="list" id="resultList"></div>
+
+        <div class="tips">
+          <div>提示：建议在一个字内完整书写，再点击识别。</div>
+          <div>如果识别未生效，请检查是否能访问 HanziLookupJS 的 CDN 资源。</div>
+        </div>
+      </section>
+    </div>
+
+    <footer>
+      * 本页面演示基于 HanziLookupJS 的在线手写识别能力，支持鼠标与触控笔输入。
+    </footer>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/gh/chanind/hanzi-lookup@master/dist/hanzi-lookup.min.js"></script>
+  <script>
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const recognizeBtn = document.getElementById("recognizeBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const undoBtn = document.getElementById("undoBtn");
+    const strokeStatus = document.getElementById("strokeStatus");
+    const primaryResult = document.getElementById("primaryResult");
+    const resultStatus = document.getElementById("resultStatus");
+    const resultList = document.getElementById("resultList");
+
+    const strokes = [];
+    let currentStroke = null;
+    let isDrawing = false;
+
+    ctx.lineWidth = 8;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#1f2937";
+
+    const updateStrokeStatus = () => {
+      strokeStatus.textContent = `当前笔画数：${strokes.length}`;
+    };
+
+    const getCanvasPoint = (event) => {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: (event.clientX - rect.left) * (canvas.width / rect.width),
+        y: (event.clientY - rect.top) * (canvas.height / rect.height)
+      };
+    };
+
+    const drawStroke = (stroke) => {
+      if (stroke.length < 2) {
+        return;
+      }
+      ctx.beginPath();
+      ctx.moveTo(stroke[0][0], stroke[0][1]);
+      stroke.slice(1).forEach(([x, y]) => {
+        ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    };
+
+    const redrawCanvas = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      strokes.forEach(drawStroke);
+    };
+
+    const beginStroke = (event) => {
+      isDrawing = true;
+      const { x, y } = getCanvasPoint(event);
+      currentStroke = [[x, y]];
+      strokes.push(currentStroke);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      updateStrokeStatus();
+    };
+
+    const extendStroke = (event) => {
+      if (!isDrawing || !currentStroke) {
+        return;
+      }
+      const { x, y } = getCanvasPoint(event);
+      currentStroke.push([x, y]);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    };
+
+    const endStroke = () => {
+      if (!isDrawing) {
+        return;
+      }
+      isDrawing = false;
+      currentStroke = null;
+    };
+
+    canvas.addEventListener("pointerdown", (event) => {
+      canvas.setPointerCapture(event.pointerId);
+      beginStroke(event);
+    });
+
+    canvas.addEventListener("pointermove", (event) => {
+      if (event.pressure === 0) {
+        return;
+      }
+      extendStroke(event);
+    });
+
+    canvas.addEventListener("pointerup", () => {
+      endStroke();
+    });
+
+    canvas.addEventListener("pointerleave", () => {
+      endStroke();
+    });
+
+    const clearCanvas = () => {
+      strokes.length = 0;
+      redrawCanvas();
+      primaryResult.textContent = "—";
+      resultStatus.textContent = "请先书写并点击“识别汉字”。";
+      resultList.innerHTML = "";
+      updateStrokeStatus();
+    };
+
+    clearBtn.addEventListener("click", clearCanvas);
+
+    undoBtn.addEventListener("click", () => {
+      strokes.pop();
+      redrawCanvas();
+      updateStrokeStatus();
+    });
+
+    const getRecognizer = () => {
+      if (window.HanziLookup) {
+        if (typeof window.HanziLookup.recognize === "function") {
+          return window.HanziLookup;
+        }
+        if (typeof window.HanziLookup === "function") {
+          return new window.HanziLookup();
+        }
+        return window.HanziLookup;
+      }
+      if (window.HanziLookupJS) {
+        return window.HanziLookupJS;
+      }
+      if (window.hanziLookup) {
+        return window.hanziLookup;
+      }
+      return null;
+    };
+
+    const performRecognition = () => {
+      if (!strokes.length) {
+        resultStatus.textContent = "请先书写汉字再识别。";
+        return;
+      }
+
+      const recognizer = getRecognizer();
+      if (!recognizer) {
+        resultStatus.textContent = "未检测到 HanziLookupJS，请检查 CDN 是否可访问。";
+        return;
+      }
+
+      let matches = [];
+      try {
+        if (typeof recognizer.lookup === "function") {
+          matches = recognizer.lookup(strokes, 8);
+        } else if (typeof recognizer.recognize === "function") {
+          matches = recognizer.recognize(strokes, 8);
+        } else if (typeof recognizer === "function") {
+          matches = recognizer(strokes, 8);
+        }
+      } catch (error) {
+        console.error(error);
+        resultStatus.textContent = "识别失败，请检查 HanziLookupJS 的 API 版本是否兼容。";
+        return;
+      }
+
+      if (!matches || matches.length === 0) {
+        resultStatus.textContent = "暂未识别出结果，请尝试调整书写。";
+        resultList.innerHTML = "";
+        primaryResult.textContent = "—";
+        return;
+      }
+
+      const normalized = matches.map((item) => {
+        if (typeof item === "string") {
+          return item;
+        }
+        if (Array.isArray(item)) {
+          return item[0];
+        }
+        if (item && item.character) {
+          return item.character;
+        }
+        if (item && item[0]) {
+          return item[0];
+        }
+        return String(item);
+      });
+
+      primaryResult.textContent = normalized[0];
+      resultStatus.textContent = "可能的候选字：";
+      resultList.innerHTML = normalized
+        .slice(0, 8)
+        .map((char) => `<span class="pill">${char}</span>`)
+        .join("");
+    };
+
+    recognizeBtn.addEventListener("click", performRecognition);
+
+    updateStrokeStatus();
+  </script>
+</body>
+</html>
