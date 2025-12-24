@@ -196,18 +196,35 @@
   <script>
     (() => {
       const cdnSources = [
+        "https://gugray.github.io/hanzilookupjs/hanzi-lookup.js",
+        "https://gugray.github.io/hanzilookupjs/hanzi-lookup.min.js",
         "https://cdn.jsdelivr.net/npm/hanzi-lookup@0.8.0/dist/hanzi-lookup.min.js",
-        "https://unpkg.com/hanzi-lookup@0.8.0/dist/hanzi-lookup.min.js"
+        "https://unpkg.com/hanzi-lookup@0.8.0/dist/hanzi-lookup.min.js",
+        "https://cdn.jsdelivr.net/gh/gugray/HanziLookupJS@master/hanzi-lookup.js",
+        "https://cdn.jsdelivr.net/gh/gugray/HanziLookupJS@master/hanzi-lookup.min.js"
       ];
+
+      const statusElement = document.getElementById("resultStatus");
+      if (statusElement) {
+        statusElement.textContent = "正在加载 HanziLookupJS…";
+      }
 
       const loadFromCdn = (index) => {
         if (index >= cdnSources.length) {
           console.warn("HanziLookupJS CDN unavailable.");
+          if (statusElement) {
+            statusElement.textContent = "HanziLookupJS 加载失败，请检查网络或更换 CDN。";
+          }
           return;
         }
         const script = document.createElement("script");
         script.src = cdnSources[index];
-        script.defer = true;
+        script.async = true;
+        script.onload = () => {
+          if (statusElement) {
+            statusElement.textContent = "HanziLookupJS 已加载，可以开始识别。";
+          }
+        };
         script.onerror = () => loadFromCdn(index + 1);
         document.head.appendChild(script);
       };
